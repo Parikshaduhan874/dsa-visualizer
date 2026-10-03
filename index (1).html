@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DSA Visualizer</title>
+<style>
+:root{--bg:#f3f5f2;--fg:#1b2a26;--card:#fff;--line:#cfd8d3;--base:#7fa99b;--cmp:#e9b44c;--swap:#d1495b;--done:#2e7d5b;--wall:#1b2a26;--vis:#9ec5e8;--path:#e9b44c}
+@media(prefers-color-scheme:dark){:root{--bg:#14201c;--fg:#e6efe9;--card:#1d2d28;--line:#35493f;--base:#5f8c7d;--wall:#e6efe9;--vis:#3b6f9a}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 Georgia,'Times New Roman',serif}
+header{padding:20px 24px 8px}
+h1{margin:0;font-size:1.7rem;letter-spacing:-.02em}
+header p{margin:2px 0 0;opacity:.7}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:12px 24px}
+select,button,input[type=range]{font:inherit}
+select,button{padding:7px 12px;border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:6px;cursor:pointer}
+button.go{background:var(--done);color:#fff;border-color:var(--done)}
+button:focus-visible,select:focus-visible{outline:3px solid var(--cmp);outline-offset:2px}
+button:disabled{opacity:.5;cursor:not-allowed}
+label{display:flex;gap:6px;align-items:center;font-size:.9rem}
+main{padding:0 24px 24px}
+#stage{background:var(--card);border:1px solid var(--line);border-radius:8px;height:340px;display:flex;align-items:flex-end;gap:2px;padding:12px}
+.b{flex:1;background:var(--base);border-radius:3px 3px 0 0;position:relative;min-width:2px}
+.b.cmp{background:var(--cmp)}.b.swap{background:var(--swap)}.b.done{background:var(--done)}.b.dim{opacity:.25}
+.b span{position:absolute;top:-18px;left:0;right:0;text-align:center;font-size:.7rem}
+#grid{display:none;grid-template-columns:repeat(var(--c),1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden;touch-action:none}
+.cell{aspect-ratio:1;background:var(--card)}
+.cell.wall{background:var(--wall)}.cell.vis{background:var(--vis)}.cell.path{background:var(--path)}
+.cell.s{background:var(--done)}.cell.t{background:var(--swap)}
+#info{margin-top:10px;min-height:1.6em}
+.legend{font-size:.85rem;opacity:.75;margin-top:4px}
+nav{position:sticky;top:0;z-index:5;display:flex;gap:18px;align-items:center;padding:10px 24px;background:var(--card);border-bottom:1px solid var(--line)}
+nav b{margin-right:auto;font-size:1.05rem}nav a{color:var(--fg);text-decoration:none;opacity:.8}nav a:hover{opacity:1;text-decoration:underline}
+.hero{padding:56px 24px 28px;max-width:900px}
+.hero h1{font-size:clamp(2rem,6vw,3.6rem);line-height:1.05}
+.hero p{font-size:1.1rem;max-width:56ch}
+.hero .go{margin-top:12px;padding:10px 18px}
+#algos{padding:16px 24px 32px;display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:16px}
+#algos h2{grid-column:1/-1;margin:0;font-size:1.3rem}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:8px}
+.card h3{margin:0}.card p{margin:0;font-size:.95rem}.card small{opacity:.7}.card button{align-self:flex-start;margin-top:auto}
+#about{margin-top:12px;font-size:.95rem;opacity:.85;max-width:80ch}
+footer{padding:20px 24px;opacity:.65;font-size:.9rem}
+html{scroll-behavior:smooth}@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+<nav><b>DSA Visualizer</b><a href="#algos">Algorithms</a><a href="#visualizer">Visualizer</a></nav>
+<header class="hero"><h1>See how algorithms think.</h1><p>Sorting, searching and graph traversal, animated one step at a time. Read how each works, then run it yourself.</p><button class="go" onclick="location.hash='#visualizer'">Open visualizer</button></header>
+<section id="algos"><h2>Algorithms</h2></section>
+<section id="visualizer">
+<div class="bar">
+  <select id="algo" aria-label="Algorithm">
+    <optgroup label="Sorting"><option value="bubble">Bubble Sort</option><option value="selection">Selection Sort</option><option value="insertion">Insertion Sort</option><option value="quick">Quick Sort</option></optgroup>
+    <optgroup label="Searching"><option value="binary">Binary Search</option><option value="linear">Linear Search</option></optgroup>
+    <optgroup label="Graph (grid)"><option value="bfs">Breadth-First Search</option><option value="dfs">Depth-First Search</option></optgroup>
+  </select>
+  <label id="sizeL">Size <input id="size" type="range" min="8" max="60" value="25"></label>
+  <label>Speed <input id="speed" type="range" min="1" max="100" value="70"></label>
+  <button id="reset">New data</button>
+  <button id="run" class="go">Start</button>
+  <button id="stop" disabled>Stop</button>
+</div>
+<main>
+  <div id="stage" aria-live="polite"></div>
+  <div id="grid" aria-label="Maze grid"></div>
+  <div id="info"></div>
+  <div id="about"></div>
+  <div class="legend" id="legend"></div>
+</main>
+</section>
+<footer>Built with plain HTML, CSS and JavaScript. Source on GitHub.</footer>
+<script>
+const $=id=>document.getElementById(id);
+const stage=$('stage'),grid=$('grid'),info=$('info');
+const sleep=()=>new Promise(r=>setTimeout(r,Math.max(1,(101-$('speed').value)*(isGraph()?3:8))));
+let arr=[],cells=[],running=false,cancel=false,target=0;
+const R=18,C=32,START=R*C>>1,GOAL=0;let S=Math.floor(R/2)*C+2,T=Math.floor(R/2)*C+C-3,walls=new Set();
+const isGraph=()=>['bfs','dfs'].includes($('algo').value);
+const isSearch=()=>['binary','linear'].includes($('algo').value);
+
+var mode=function(){
+  const g=isGraph();stage.style.display=g?'none':'flex';grid.style.display=g?'grid':'none';
+  $('sizeL').style.display=g?'none':'flex';
+  $('reset').textContent=g?'Clear grid':'New data';
+  $('legend').textContent=g?'Click or drag to draw walls. Green = start, red = goal, blue = visited, yellow = shortest path.':
+    isSearch()?'Yellow = being checked, green = found. Binary search needs sorted data, so the bars are sorted for you.':'Yellow = comparing, red = swapping, green = in final place.';
+  reset();
+}
+function reset(){
+  if(running)return;info.textContent='';
+  if(isGraph()){walls.clear();buildGrid()}else buildBars();
+}
+function buildBars(){
+  const n=+$('size').value;arr=Array.from({length:n},()=>5+Math.floor(Math.random()*95));
+  if(isSearch())arr.sort((a,b)=>a-b);
+  stage.innerHTML='';
+  arr.forEach(v=>{const d=document.createElement('div');d.className='b';d.style.height=v+'%';
+    if(n<=30)d.innerHTML='<span>'+v+'</span>';stage.appendChild(d)});
+}
+const bars=()=>stage.children;
+function buildGrid(){
+  grid.style.setProperty('--c',C);grid.innerHTML='';cells=[];
+  for(let i=0;i<R*C;i++){const d=document.createElement('div');d.className='cell';
+    d.dataset.i=i;grid.appendChild(d);cells.push(d)}
+  cells[S].classList.add('s');cells[T].classList.add('t');
+}
+let drawing=false;
+function paint(e){const el=document.elementFromPoint(e.clientX,e.clientY);
+  if(!el||!el.classList.contains('cell')||running)return;const i=+el.dataset.i;
+  if(i===S||i===T)return;walls.add(i);el.classList.add('wall')}
+grid.addEventListener('pointerdown',e=>{drawing=true;paint(e)});
+grid.addEventListener('pointermove',e=>{if(drawing)paint(e)});
+addEventListener('pointerup',()=>drawing=false);
+
+const set=(i,c)=>{if(bars()[i])bars()[i].classList.add(c)};
+const unset=(i,c)=>{if(bars()[i])bars()[i].classList.remove(c)};
+const swap=async(i,j)=>{[arr[i],arr[j]]=[arr[j],arr[i]];
+  const a=bars()[i],b=bars()[j];[a.style.height,b.style.height]=[b.style.height,a.style.height];
+  [a.innerHTML,b.innerHTML]=[b.innerHTML,a.innerHTML]};
+const chk=()=>{if(cancel)throw 'stop'};
+
+async function bubble(){
+  const n=arr.length;
+  for(let i=0;i<n-1;i++){
+    for(let j=0;j<n-1-i;j++){chk();set(j,'cmp');set(j+1,'cmp');await sleep();
+      if(arr[j]>arr[j+1]){set(j,'swap');set(j+1,'swap');await swap(j,j+1);await sleep()}
+      ['cmp','swap'].forEach(c=>{unset(j,c);unset(j+1,c)})}
+    set(n-1-i,'done')}
+  set(0,'done');
+}
+async function selection(){
+  const n=arr.length;
+  for(let i=0;i<n-1;i++){
+    let m=i;set(m,'swap');
+    for(let j=i+1;j<n;j++){chk();set(j,'cmp');await sleep();
+      if(arr[j]<arr[m]){unset(m,'swap');m=j;set(m,'swap')}unset(j,'cmp')}
+    if(m!==i)await swap(i,m);unset(m,'swap');set(i,'done');await sleep()}
+  set(n-1,'done');
+}
+async function insertion(){
+  const n=arr.length;set(0,'done');
+  for(let i=1;i<n;i++){
+    let j=i;set(j,'cmp');
+    while(j>0&&arr[j-1]>arr[j]){chk();set(j-1,'swap');await sleep();await swap(j-1,j);
+      unset(j,'cmp');unset(j,'swap');unset(j-1,'swap');j--;set(j,'cmp')}
+    await sleep();unset(j,'cmp');
+    for(let k=0;k<=i;k++)set(k,'done')}
+}
+async function quick(lo=0,hi=arr.length-1){
+  if(lo>hi)return;if(lo===hi){set(lo,'done');return}
+  const p=arr[hi];set(hi,'swap');let i=lo;
+  for(let j=lo;j<hi;j++){chk();set(j,'cmp');await sleep();if(arr[j]<p){await swap(i,j);i++}unset(j,'cmp')}
+  await swap(i,hi);unset(hi,'swap');set(i,'done');
+  await quick(lo,i-1);await quick(i+1,hi);
+}
+function pickTarget(){target=arr[Math.floor(Math.random()*arr.length)];info.textContent='Looking for '+target+'…'}
+async function linear(){
+  pickTarget();
+  for(let i=0;i<arr.length;i++){chk();set(i,'cmp');await sleep();
+    if(arr[i]===target){unset(i,'cmp');set(i,'done');info.textContent='Found '+target+' at index '+i+' after '+(i+1)+' checks.';return}
+    unset(i,'cmp');set(i,'dim')}
+}
+async function binary(){
+  pickTarget();let lo=0,hi=arr.length-1,steps=0;
+  while(lo<=hi){chk();steps++;const mid=(lo+hi)>>1;
+    for(let k=0;k<arr.length;k++){k<lo||k>hi?set(k,'dim'):unset(k,'dim')}
+    set(mid,'cmp');await sleep();await sleep();
+    if(arr[mid]===target){unset(mid,'cmp');set(mid,'done');info.textContent='Found '+target+' at index '+mid+' in '+steps+' steps.';return}
+    unset(mid,'cmp');arr[mid]<target?lo=mid+1:hi=mid-1}
+  info.textContent='Not found.';
+}
+async function graph(kind){
+  const dist=new Array(R*C).fill(-1),prev=new Array(R*C).fill(-1),seen=new Set([S]);
+  const frontier=[S];let found=false;
+  const nb=i=>{const r=Math.floor(i/C),c=i%C,o=[];
+    if(r>0)o.push(i-C);if(c<C-1)o.push(i+1);if(r<R-1)o.push(i+C);if(c>0)o.push(i-1);
+    return o.filter(x=>!walls.has(x))};
+  while(frontier.length){chk();
+    const cur=kind==='bfs'?frontier.shift():frontier.pop();
+    if(cur===T){found=true;break}
+    if(cur!==S){cells[cur].classList.add('vis');await sleep()}
+    const ns=nb(cur);if(kind==='dfs')ns.reverse();
+    for(const n of ns){if(!seen.has(n)){seen.add(n);prev[n]=cur;frontier.push(n)}}}
+  if(!found){info.textContent='No path: the goal is walled off.';return}
+  const path=[];for(let p=prev[T];p!==S&&p!==-1;p=prev[p])path.push(p);
+  for(const p of path.reverse()){cells[p].classList.remove('vis');cells[p].classList.add('path');await sleep()}
+  info.textContent=(kind==='bfs'?'BFS':'DFS')+' path length: '+(path.length+1)+' steps'+(kind==='dfs'?' (DFS does not guarantee the shortest path).':' (shortest possible).');
+}
+const algos={quick:()=>quick(),bubble,selection,insertion,linear,binary,bfs:()=>graph('bfs'),dfs:()=>graph('dfs')};
+
+async function start(){
+  if(running)return;
+  // restore a clean state before each run
+  if(isGraph())cells.forEach((c,i)=>c.classList.remove('vis','path'));else buildBars();
+  running=true;cancel=false;$('run').disabled=true;$('stop').disabled=false;$('reset').disabled=true;$('algo').disabled=true;
+  try{await algos[$('algo').value]()}catch(e){if(e!=='stop')throw e;info.textContent='Stopped.'}
+  running=false;$('run').disabled=false;$('stop').disabled=true;$('reset').disabled=false;$('algo').disabled=false;
+}
+$('run').onclick=start;$('stop').onclick=()=>cancel=true;
+$('reset').onclick=reset;$('algo').onchange=mode;
+$('size').oninput=()=>{if(!running)buildBars()};
+const INFO={
+bubble:['Bubble Sort','Compares neighbouring items left to right and swaps any pair that is out of order. Repeats until a full pass makes no swaps.','Time O(n²), space O(1)'],
+selection:['Selection Sort','Splits the list into sorted and unsorted parts. Each round it picks the smallest unsorted item and moves it to the front of the unsorted part.','Time O(n²), space O(1)'],
+insertion:['Insertion Sort','Builds the sorted list one item at a time, sliding each new item back until it sits in the right place.','Time O(n²), best case O(n), space O(1)'],
+quick:['Quick Sort','Picks a pivot, moves smaller items before it and larger items after it, then sorts each side the same way.','Time O(n log n) on average, O(n²) worst case'],
+linear:['Linear Search','Checks items one by one from the start until it finds the target or runs out of items.','Time O(n), works on unsorted data'],
+binary:['Binary Search','Looks at the middle of a sorted list and discards the half that cannot hold the target. Repeats on what is left.','Time O(log n), needs sorted data'],
+bfs:['Breadth-First Search','Explores the grid outward in rings, nearest cells first. It always finds a shortest path on an unweighted grid.','Time O(V + E), uses a queue'],
+dfs:['Depth-First Search','Follows one route as far as it can, then backs up and tries another. It finds a path, but not always the shortest.','Time O(V + E), uses a stack']};
+Object.entries(INFO).forEach(([id,[n,t,c]])=>{const d=document.createElement('div');d.className='card';
+  d.innerHTML='<h3>'+n+'</h3><p>'+t+'</p><small>'+c+'</small>';
+  const b=document.createElement('button');b.textContent='Try '+n;
+  b.onclick=()=>{if(running)return;$('algo').value=id;mode();location.hash='#visualizer'};
+  d.appendChild(b);$('algos').appendChild(d)});
+const _mode=mode;mode=function(){_mode();const i=INFO[$('algo').value];$('about').textContent=i[1]+' '+i[2]+'.'};
+$('algo').onchange=mode;
+mode();
+</script>
+</body>
+</html>
