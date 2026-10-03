@@ -12,9 +12,7 @@ Pick an algorithm, adjust size and speed, then press **Start**. On the grid, cli
 
 ## Run locally
 ```
-git clone https://github.com/<Parikshaduhan874>/dsa-visualizer.git
-cd dsa-visualizer
-open index.html
+https://parikshaduhan874.github.io/dsa-visualizer/
 ```
 
 
